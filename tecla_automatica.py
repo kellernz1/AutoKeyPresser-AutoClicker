@@ -246,6 +246,12 @@ def list_open_windows(excluded_hwnd=None):
     return windows
 
 
+def get_foreground_window_handle():
+    """Return zero when Windows temporarily has no foreground window."""
+    hwnd = user32.GetForegroundWindow()
+    return int(hwnd) if hwnd else 0
+
+
 def focus_window(hwnd):
     """Bring a window to the foreground, including from a worker thread."""
     if not user32.IsWindow(hwnd):
@@ -277,7 +283,7 @@ def focus_window(hwnd):
             user32.AttachThreadInput(current_thread, target_thread, False)
         if attached_foreground:
             user32.AttachThreadInput(current_thread, foreground_thread, False)
-    return int(user32.GetForegroundWindow()) == int(hwnd)
+    return get_foreground_window_handle() == int(hwnd)
 
 
 class KeyAutomationApp:
@@ -647,13 +653,13 @@ class KeyAutomationApp:
         if not user32.IsWindow(target_hwnd):
             raise RuntimeError("The selected window was closed.")
         if target_mode == TARGET_ACTIVE:
-            return int(user32.GetForegroundWindow()) == target_hwnd
+            return get_foreground_window_handle() == target_hwnd
         return True
 
     def begin_autofocus(self, target_mode, target_hwnd):
         if target_mode != TARGET_AUTOFOCUS:
             return None
-        previous_hwnd = int(user32.GetForegroundWindow() or 0)
+        previous_hwnd = get_foreground_window_handle()
         if not focus_window(target_hwnd):
             raise RuntimeError(
                 "Windows did not allow the selected window to receive focus. "
@@ -703,7 +709,10 @@ class KeyAutomationApp:
                 deadline = time.monotonic() + duration
                 while not self.stop_event.is_set() and time.monotonic() < deadline:
                     focus_required = target_mode in (TARGET_ACTIVE, TARGET_AUTOFOCUS)
-                    if focus_required and int(user32.GetForegroundWindow()) != target_hwnd:
+                    if (
+                        focus_required
+                        and get_foreground_window_handle() != target_hwnd
+                    ):
                         break
                     remaining = max(0, deadline - time.monotonic())
                     self.interruptible_wait(min(0.02, remaining))
